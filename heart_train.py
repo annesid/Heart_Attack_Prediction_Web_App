@@ -10,7 +10,6 @@ import os
 import pickle
 import numpy as np
 import pandas as pd
-import scipy.stats as ss
 import matplotlib.pyplot as plt
 from sklearn.svm import SVC
 from sklearn.pipeline import Pipeline
@@ -23,20 +22,7 @@ from sklearn.model_selection import train_test_split,GridSearchCV
 from sklearn.ensemble import RandomForestClassifier,GradientBoostingClassifier
 from sklearn.metrics import classification_report,ConfusionMatrixDisplay,confusion_matrix
 
-#%%
-def cramers_corrected_stat(conf_matrix):
-    """ calculate Cramers V statistic for categorial-categorial association.
-        uses correction from Bergsma and Wicher, 
-        Journal of the Korean Statistical Society 42 (2013): 323-328
-    """
-    chi2 = ss.chi2_contingency(conf_matrix)[0]
-    n = conf_matrix.sum()
-    phi2 = chi2/n
-    r,k = conf_matrix.shape
-    phi2corr = max(0, phi2 - ((k-1)*(r-1))/(n-1))    
-    rcorr = r - ((r-1)**2)/(n-1)
-    kcorr = k - ((k-1)**2)/(n-1)
-    return np.sqrt(phi2corr / min( (kcorr-1), (rcorr-1)))
+from heart_module import EDA
 
 #%%
 CSV_PATH = os.path.join(os.getcwd(),'Dataset','heart.csv')
@@ -58,9 +44,9 @@ df.isna().sum()
 cont=['age','trtbps','chol','thalachh','oldpeak']
 cat =df.drop(labels=cont,axis=1).columns
 
-# eda = EDA()
-# eda.displot_graph(cont,df)
-# eda.countplot_graph(cat,df)
+eda = EDA()
+eda.displot_graph(cont,df)
+eda.countplot_graph(cat,df)
 
 # thall has null mask as 0
 #caa has null mask 4
@@ -110,8 +96,8 @@ for i in cont:
 for i in cat:
     print(i)
     matrix = pd.crosstab(df[i],y).to_numpy()
-    print(cramers_corrected_stat(matrix))
-    if cramers_corrected_stat(matrix) > 0.4:
+    print(eda.cramers_corrected_stat(matrix))
+    if eda.cramers_corrected_stat(matrix) > 0.4:
         selected_features.append(i)
 print(selected_features)
 
@@ -230,20 +216,12 @@ cr = classification_report(y_true,y_pred)
 print(cr)
 
 #%% GridSearch CV
-
 #follow result pipeline(above) to choose which Gridsearch - Logistic MinMaxScaler
 
-# grid_param = [{'Logistic__penalty':['l1','l2'],
-#                 'Logistic__solver':['liblinear']}]
-
-grid_param=[{'Logistic__penalty':['l1','l2'],
+grid_param=[{'Logistic__penalty':['l2'],
              'Logistic__C':np.arange(1,5,.1),
              'Logistic__intercept_scaling':np.arange(1,10,1),
              'Logistic__solver':['newton-cg','lbfgs','liblinear','sag','saga']}]
-
-# grid_param = [{'KNN__n_neighbors':[5,3,11], #must use odd number
-#                'KNN__weights':['uniform','distance'],
-#                'KNN__p':[1,2]}]
 
 grid_search = GridSearchCV(estimator=pipeline_mms_lr, param_grid=grid_param,
                     cv=5,verbose=1,n_jobs=-1)
@@ -255,6 +233,14 @@ print(grid.best_params_)
 
 best_model =grid.best_estimator_
 
+#%% model evaluation
+
+cm=confusion_matrix(y_test,y_pred)
+
+labels = ['Less chance','More chance']
+disp=ConfusionMatrixDisplay(confusion_matrix=cm,display_labels=labels)
+disp.plot(cmap=plt.cm.Blues)
+plt.show()
 #%% Model saving
 
 with open(MODEL_PATH,'wb') as file:
